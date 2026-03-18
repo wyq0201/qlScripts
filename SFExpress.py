@@ -22,6 +22,21 @@ from threading import Lock
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
+# ==================== Bark 推送配置 ====================
+# 添加自定义参数，也可以留空
+CUSTOM_BARK_ICON = "https://gitee.com/hlt1995/BARK_ICON/raw/main/SFExpress.png"   # 自定义图标
+CUSTOM_BARK_GROUP = "顺丰速运"              # 自定义分组
+PUSH_SWITCH = "1"                #推送开关，1开启，0关闭
+# =======================================================
+
+BARK_PUSH = os.getenv("BARK_PUSH")
+BARK_ICON = CUSTOM_BARK_ICON or os.getenv("BARK_ICON", "")
+BARK_GROUP = CUSTOM_BARK_GROUP or os.getenv("BARK_GROUP", "")
+
+os.environ["BARK_ICON"] = BARK_ICON
+os.environ["BARK_GROUP"] = BARK_GROUP
+os.environ["PUSH_SWITCH"] = PUSH_SWITCH
+
 # 禁用SSL警告
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
@@ -577,11 +592,11 @@ class TaskExecutor:
             # 恢复原有的platform头
             self.http.headers['platform'] = original_platform
     
-    def sign_in(self) -> tuple[bool, str]:
+    def sign_in(self) -> tuple[bool, int, str, str]:
         """小程序每日签到
         
         Returns:
-            tuple[bool, str]: (是否成功, 错误信息)
+            tuple: (是否成功, countDay, packetName, 错误信息)
         """
         url = 'https://mcs-mimp-web.sf-express.com/mcs-mimp/commonPost/~memberNonactivity~integralTaskSignPlusService~automaticSignFetchPackage'
         data = {"comeFrom": "vioin", "channelFrom": "WEIXIN"}
@@ -590,17 +605,13 @@ class TaskExecutor:
         if response and response.get('success'):
             count_day = response.get('obj', {}).get('countDay', 0)
             packet_list = response.get('obj', {}).get('integralTaskSignPackageVOList', [])
-            
-            if packet_list:
-                packet_name = packet_list[0].get('packetName', '未知奖励')
-                self.logger.success(f'签到成功，获得【{packet_name}】，本周累计签到【{count_day + 1}】天')
-            else:
-                self.logger.info(f'今日已签到，本周累计签到【{count_day + 1}】天')
-            return True, ''
+            packet_name = packet_list[0].get('packetName', '') if packet_list else ''
+            self.logger.success(f'签到成功，获得【{packet_name}】，本周累计签到【{count_day + 1}】天')
+            return True, count_day, packet_name, ''
         else:
             error_msg = response.get('errorMessage', '未知错误') if response else '请求失败'
             self.logger.error(f'签到失败: {error_msg}')
-            return False, error_msg
+            return False, 0, '', error_msg
     
     def get_task_list(self) -> List[Dict]:
         """获取任务列表"""
@@ -951,7 +962,10 @@ class AccountManager:
                 'phone': '',
                 'points_before': 0,
                 'points_after': 0,
-                'points_earned': 0
+                'points_earned': 0,
+                'sign_success': False,
+                'countDay': 0,
+                'sign_error': '登录失败'
             }
         
         # 随机延迟
@@ -966,10 +980,10 @@ class AccountManager:
         time.sleep(1)
         
         # 再执行小程序签到
-        sign_success, error_msg = executor.sign_in()
+        sign_success, count_day, packet_name, sign_error = executor.sign_in()
         
         # 如果签到失败且错误信息包含“活动太火爆”，尝试重新登录
-        if not sign_success and '活动太火爆' in error_msg:
+        if not sign_success and '活动太火爆' in sign_error:
             max_retries = 3
             for retry in range(max_retries):
                 self.logger.warning(f'签到失败（代理IP问题），{2}秒后重新获取代理并重试（第{retry + 1}次）...')
@@ -988,12 +1002,12 @@ class AccountManager:
                         executor.user_id = self.user_id
                         
                         # 重试签到
-                        sign_success, error_msg = executor.sign_in()
+                        sign_success, count_day, packet_name, sign_error = executor.sign_in()
                         
                         if sign_success:
                             self.logger.success('重新登录后签到成功')
                             break
-                        elif '活动太火爆' not in error_msg:
+                        elif '活动太火爆' not in sign_error:
                             # 如果不是代理问题，则不再重试
                             break
                     else:
@@ -1013,7 +1027,10 @@ class AccountManager:
             'phone': self.phone,
             'points_before': points_before,
             'points_after': points_after,
-            'points_earned': points_earned
+            'points_earned': points_earned,
+            'sign_success': sign_success,
+            'countDay': count_day,
+            'sign_error': sign_error
         }
 
 
@@ -1057,7 +1074,9 @@ def run_single_account(account_info: str, index: int, config: Config) -> Dict[st
             'points_before': 0,
             'points_after': 0,
             'points_earned': 0,
-            'error': error_msg
+            'sign_success': False,
+            'countDay': 0,
+            'sign_error': error_msg
         }
 
 
@@ -1150,6 +1169,58 @@ def main():
     print("=" * 80)
     
     print("\n🎊 所有账号任务执行完成!")
+    
+    # ==================== Bark推送 ====================
+    if PUSH_SWITCH == "1" and BARK_PUSH:
+        
+        # 自动补全Bark地址（若只提供了Key）
+        bark_url = BARK_PUSH
+        if not bark_url.startswith('http://') and not bark_url.startswith('https://'):
+            bark_url = 'https://api.day.app/' + bark_url
+        
+        title = "🚚 顺丰速运签到结果\n"
+        body = ""
+        for r in all_results:
+            index = r['index'] + 1
+            phone = r.get('phone', '')
+            masked_phone = phone[:3] + "****" + phone[7:] if phone and len(phone) == 11 else phone
+            body += f"👤 账号{index}:【{masked_phone}】\n"
+            if r.get('success'):
+                sign_success = r.get('sign_success', False)
+                if sign_success:
+                    count_day = r.get('countDay', 0)
+                    total_sign_day = count_day + 1
+                    body += f"✨ 签到成功，本周累计签到【{total_sign_day}】天\n"
+                else:
+                    sign_error = r.get('sign_error', '未知错误')
+                    body += f"⚠️ 签到失败：{sign_error}\n"
+                points_after = r.get('points_after', 0)
+                points_earned = r.get('points_earned', 0)
+                body += f"💰 当前积分：【{points_after}】（{'+' if points_earned>=0 else ''}{points_earned}）\n"
+            else:
+                body += f"❌ 账号执行失败\n"
+            body += "\n"
+        
+        # 发送推送
+        try:
+            data = {
+                "title": title,
+                "body": body.strip(),
+                "icon": BARK_ICON,
+                "group": BARK_GROUP
+            }
+            resp = requests.post(bark_url, json=data, timeout=10)
+            if resp.status_code == 200:
+                print(f"✅ Bark推送成功")
+            else:
+                print(f"⚠️ Bark推送失败，状态码: {resp.status_code}")
+        except Exception as e:
+            print(f"❌ Bark推送异常: {e}")
+    else:
+        if not BARK_PUSH:
+            print("\n📱 未配置BARK_PUSH，跳过推送")
+        elif PUSH_SWITCH != "1":
+            print("\n📱 推送开关已关闭，跳过推送")
 
 
 if __name__ == '__main__':
