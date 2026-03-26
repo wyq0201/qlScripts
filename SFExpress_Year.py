@@ -24,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from notify import send
 
 # 禁用SSL警告
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
@@ -851,6 +852,32 @@ def main():
     print(f"{'汇总':<6} {'账号: ' + str(len(all_results)):<15} {total_tasks:<12} {total_medals:<12}")
     print("=" * 70)
     print("\n🎊 所有账号执行完成!")
+    title = "顺丰速运33周年活动"
+    report_lines = []
+
+    for r in all_results:
+        idx = r['index'] + 1
+        phone = r['phone'][:3] + "****" + r['phone'][7:] if r.get('phone') and len(r['phone']) >= 7 else r.get('phone', '未登录')
+        tasks = r.get('tasks_completed', 0)
+        medals = r.get('medals_claimed', 0)
+        detail = ', '.join([f"{d['type']}x{d['amount']}" for d in r.get('medals_detail', [])]) or '无'
+        status = "✅成功" if r['success'] else "❌失败"
+
+        report_lines.append(f"👤 账号{idx}:【{phone}】 {status}")
+        report_lines.append(f"🎯 完成任务: {tasks}")
+        report_lines.append(f"🏅 抽到勋章: {medals}")
+        report_lines.append(f"📋 勋章详情: {detail}")
+        report_lines.append("")
+
+    report_lines.append(f"📱 账号数: {len(all_results)}")
+    report_lines.append(f"🎯 总完成任务: {total_tasks}")
+    report_lines.append(f"🏅 总勋章数: {total_medals}")
+
+    try:
+        send(title, "\n".join(report_lines).strip())
+        print("✅ notify 推送已发送")
+    except Exception as e:
+        print(f"❌ notify 推送异常: {e}")
 
 
 if __name__ == '__main__':
