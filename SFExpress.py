@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from notify import send
 
 # ==================== Bark 推送配置 ====================
 # 添加自定义参数，也可以留空
@@ -1170,57 +1171,43 @@ def main():
     
     print("\n🎊 所有账号任务执行完成!")
     
-    # ==================== Bark推送 ====================
-    if PUSH_SWITCH == "1" and BARK_PUSH:
-        
-        # 自动补全Bark地址（若只提供了Key）
-        bark_url = BARK_PUSH
-        if not bark_url.startswith('http://') and not bark_url.startswith('https://'):
-            bark_url = 'https://api.day.app/' + bark_url
-        
-        title = "🚚 顺丰速运签到结果\n"
-        body = ""
-        for r in all_results:
-            index = r['index'] + 1
-            phone = r.get('phone', '')
-            masked_phone = phone[:3] + "****" + phone[7:] if phone and len(phone) == 11 else phone
-            body += f"👤 账号{index}:【{masked_phone}】\n"
-            if r.get('success'):
-                sign_success = r.get('sign_success', False)
-                if sign_success:
-                    count_day = r.get('countDay', 0)
-                    total_sign_day = count_day + 1
-                    body += f"✨ 签到成功，本周累计签到【{total_sign_day}】天\n"
-                else:
-                    sign_error = r.get('sign_error', '未知错误')
-                    body += f"⚠️ 签到失败：{sign_error}\n"
-                points_after = r.get('points_after', 0)
-                points_earned = r.get('points_earned', 0)
-                body += f"💰 当前积分：【{points_after}】（{'+' if points_earned>=0 else ''}{points_earned}）\n"
+    # ==================== 通知推送 ====================
+    title = "顺丰速运签到结果"
+    lines = []
+
+    for r in all_results:
+        index = r['index'] + 1
+        phone = r.get('phone', '')
+        masked_phone = phone[:3] + "****" + phone[7:] if phone and len(phone) == 11 else (phone or "未登录")
+        lines.append(f"👤 账号{index}:【{masked_phone}】")
+        if r.get('success'):
+            sign_success = r.get('sign_success', False)
+            if sign_success:
+                count_day = r.get('countDay', 0)
+                total_sign_day = count_day + 1
+                lines.append(f"✨ 签到成功，本周累计签到【{total_sign_day}】天")
             else:
-                body += f"❌ 账号执行失败\n"
-            body += "\n"
-        
-        # 发送推送
-        try:
-            data = {
-                "title": title,
-                "body": body.strip(),
-                "icon": BARK_ICON,
-                "group": BARK_GROUP
-            }
-            resp = requests.post(bark_url, json=data, timeout=10)
-            if resp.status_code == 200:
-                print(f"✅ Bark推送成功")
-            else:
-                print(f"⚠️ Bark推送失败，状态码: {resp.status_code}")
-        except Exception as e:
-            print(f"❌ Bark推送异常: {e}")
-    else:
-        if not BARK_PUSH:
-            print("\n📱 未配置BARK_PUSH，跳过推送")
-        elif PUSH_SWITCH != "1":
-            print("\n📱 推送开关已关闭，跳过推送")
+                sign_error = r.get('sign_error', '未知错误')
+                lines.append(f"⚠️ 签到失败：{sign_error}")
+            points_after = r.get('points_after', 0)
+            points_earned = r.get('points_earned', 0)
+            lines.append(f"💰 当前积分：【{points_after}】（{'+' if points_earned >= 0 else ''}{points_earned}）")
+        else:
+            lines.append("❌ 账号执行失败")
+        lines.append("")
+
+    lines.append(f"📱 账号总数：{len(all_results)}")
+    lines.append(f"✅ 成功：{success_count}")
+    lines.append(f"❌ 失败：{fail_count}")
+    lines.append(f"🎁 今日总获得：{total_earned}")
+
+    body = "\n".join(lines).strip()
+
+    try:
+        send(title, body)
+        print("✅ notify 推送已发送")
+    except Exception as e:
+        print(f"❌ notify 推送异常: {e}")
 
 
 if __name__ == '__main__':
