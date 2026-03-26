@@ -27,7 +27,7 @@
     }
   });
   _0x1398c0 = 7;
-  const _0x1a907b = _0xf189dd("🌟 电信营业厅签到结果\n"),
+  const _0x1a907b = _0xf189dd("🌟 电信营业厅签到结果"),
     _0x221366 = require("got"),
     _0x7c8459 = require("path"),
     {
