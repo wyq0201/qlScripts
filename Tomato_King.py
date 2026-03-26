@@ -5,6 +5,7 @@ import time
 import re
 import random
 from collections import defaultdict
+from notify import send
 
 # cron: 25 12 * * *
 # const $ = new Env('统一茄皇')
@@ -475,7 +476,7 @@ def process_user(user_info, user_index):
 if __name__ == "__main__":
     if not users or len(users) == 0:
         print("未从环境变量QH中获取到任何用户信息！ 🚫")
-        #send("统一茄皇", "未从环境变量QH中获取到任何用户信息！ 🚫")
+        send("统一茄皇", "未从环境变量QH中获取到任何用户信息！ 🚫")
     else:
         print(f"共检测到 {len(users)} 个用户，开始依次处理... 👥")
         all_logs = []
@@ -489,4 +490,4 @@ if __name__ == "__main__":
                 print(error_msg)
                 all_logs.append(f"❌ {error_msg}")
                 all_logs.append("")
-        #send("统一茄皇", render_report(all_logs))
+        send("统一茄皇", render_report(all_logs))
