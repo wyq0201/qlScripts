@@ -362,12 +362,10 @@ def chat(title: str, content: str) -> None:
 
 
 def pushplus_bot(title: str, content: str) -> None:
-    """
-    通过 push+ 推送消息。
-    """
     if not push_config.get("PUSH_PLUS_TOKEN"):
         print("PUSHPLUS 服务的 PUSH_PLUS_TOKEN 未设置!!\n取消推送")
         return
+
     print("PUSHPLUS 服务启动")
 
     url = "https://www.pushplus.plus/send"
@@ -375,26 +373,28 @@ def pushplus_bot(title: str, content: str) -> None:
         "token": push_config.get("PUSH_PLUS_TOKEN"),
         "title": title,
         "content": content,
+        "template": "html",
         "topic": push_config.get("PUSH_PLUS_USER"),
     }
-    body = json.dumps(data).encode(encoding="utf-8")
-    headers = {"Content-Type": "application/json"}
-    response = requests.post(url=url, data=body, headers=headers).json()
 
-    if response["code"] == 200:
-        print("PUSHPLUS 推送成功！")
+    try:
+        response = requests.post(url, json=data, timeout=15)
+        print(f"PUSHPLUS 响应状态码: {response.status_code}")
+        print(f"PUSHPLUS 响应内容: {response.text}")
 
-    else:
-
-        url_old = "https://www.pushplus.plus/send"
-        headers["Accept"] = "application/json"
-        response = requests.post(url=url_old, data=body, headers=headers).json()
-
-        if response["code"] == 200:
-            print("PUSHPLUS(hxtrip) 推送成功！")
-
+        if response.status_code == 200:
+            try:
+                res_json = response.json()
+                if res_json.get("code") == 200:
+                    print("PUSHPLUS 推送完成！")
+                else:
+                    print("PUSHPLUS 推送失败！")
+            except:
+                print("PUSHPLUS 推送失败！返回内容不是 JSON")
         else:
             print("PUSHPLUS 推送失败！")
+    except Exception as e:
+        print(f"PUSHPLUS 推送异常: {e}")
 
 
 def qmsg_bot(title: str, content: str) -> None:
