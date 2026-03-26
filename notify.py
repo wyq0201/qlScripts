@@ -369,10 +369,17 @@ def pushplus_bot(title: str, content: str) -> None:
     print("PUSHPLUS 服务启动")
 
     url = "https://www.pushplus.plus/send"
+
+    safe_title = str(title).replace("\r", " ").replace("\n", " ").strip()
+    if not safe_title:
+        safe_title = "通知"
+
+    safe_content = str(content)
+
     data = {
         "token": push_config.get("PUSH_PLUS_TOKEN"),
-        "title": title,
-        "content": content,
+        "title": safe_title,
+        "content": safe_content,
         "template": "html",
         "topic": push_config.get("PUSH_PLUS_USER"),
     }
@@ -389,7 +396,7 @@ def pushplus_bot(title: str, content: str) -> None:
                     print("PUSHPLUS 推送完成！")
                 else:
                     print("PUSHPLUS 推送失败！")
-            except:
+            except Exception:
                 print("PUSHPLUS 推送失败！返回内容不是 JSON")
         else:
             print("PUSHPLUS 推送失败！")
