@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from notify import send
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
@@ -433,6 +434,52 @@ def main():
 
     print(f"{'='*60}")
     print("🎊 抽奖完成!")
+    title = "顺丰33周年抽奖"
+    report_lines = []
+
+    for r in all_results:
+        phone = r['phone']
+        masked = phone[:3] + "****" + phone[7:] if phone and len(phone) >= 7 else (phone or '未登录')
+        prizes = r.get('prizes', [])
+        if not r['success']:
+            report_lines.append(f"❌ {masked}: 登录失败")
+        elif not prizes:
+            report_lines.append(f"⚠️ {masked}: 勋章不足，未抽奖")
+        else:
+            report_lines.append(f"👤 {masked}")
+            for p in prizes:
+                report_lines.append(f"🎉 {p['gift_name']} (价值{p['gift_worth']}元)")
+        report_lines.append("")
+
+    report_lines.append(f"📱 总账号: {len(all_results)}")
+    report_lines.append(f"🎲 总抽奖: {total_draws} 次")
+    report_lines.append(f"🎁 总奖品: {len(all_prizes)} 个")
+
+    if all_prizes:
+        total_worth = sum(p['gift_worth'] for p in all_prizes)
+        report_lines.append(f"💰 总价值: {total_worth} 元")
+
+        gift_count = {}
+        for p in all_prizes:
+            name = p['gift_name']
+            gift_count[name] = gift_count.get(name, 0) + 1
+        report_lines.append("")
+        report_lines.append("📋 奖品统计:")
+        for name, count in sorted(gift_count.items(), key=lambda x: -x[1]):
+            report_lines.append(f"{name} x{count}")
+
+    if high_value_prizes:
+        report_lines.append("")
+        report_lines.append("🏆 高价值奖品明细:")
+        for p in high_value_prizes:
+            masked = p.get('masked_phone', p.get('phone', '未知')[:3] + "****" + p.get('phone', '')[7:])
+            report_lines.append(f"📞 {masked}: {p['gift_name']} (价值{p['gift_worth']}元)")
+
+    try:
+        send(title, "\n".join(report_lines).strip())
+        print("✅ notify 推送已发送")
+    except Exception as e:
+        print(f"❌ notify 推送异常: {e}")
 
 
 if __name__ == '__main__':
