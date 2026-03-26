@@ -370,7 +370,7 @@ def pushplus_bot(title: str, content: str) -> None:
         return
     print("PUSHPLUS 服务启动")
 
-    url = "http://www.pushplus.plus/send"
+    url = "https://www.pushplus.plus/send"
     data = {
         "token": push_config.get("PUSH_PLUS_TOKEN"),
         "title": title,
@@ -386,7 +386,7 @@ def pushplus_bot(title: str, content: str) -> None:
 
     else:
 
-        url_old = "http://pushplus.hxtrip.com/send"
+        url_old = "https://www.pushplus.plus/send"
         headers["Accept"] = "application/json"
         response = requests.post(url=url_old, data=body, headers=headers).json()
 
